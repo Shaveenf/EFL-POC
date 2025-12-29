@@ -242,13 +242,43 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>📄 Shipping Document Extractor</h1>
-      <p class="subtitle">Extract structured data from shipping documents using AI</p>
+    <h1>📄 Shipping Document Extractor</h1>
+    <p class="subtitle">Extract structured data from shipping documents using AI</p>
     </div>
 
     <div class="action-section">
       <h2 style="margin-top: 0; margin-bottom: 20px;">Upload Document</h2>
       
+      <div style="margin-bottom: 20px;">
+        <label for="documentType" style="display: block; margin-bottom: 10px; font-weight: 600; color: #34495e;">
+          Select Document Type:
+        </label>
+        <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+          <label style="display: flex; align-items: center; cursor: pointer; padding: 10px 15px; background: #f8f9fa; border-radius: 6px; border: 2px solid #e0e0e0; transition: all 0.2s;">
+            <input type="radio" name="documentType" value="COMMERCIAL_INVOICE" checked style="margin-right: 8px; cursor: pointer;">
+            <span>Commercial Invoice</span>
+          </label>
+          <label style="display: flex; align-items: center; cursor: pointer; padding: 10px 15px; background: #f8f9fa; border-radius: 6px; border: 2px solid #e0e0e0; transition: all 0.2s;">
+            <input type="radio" name="documentType" value="HBL" style="margin-right: 8px; cursor: pointer;">
+            <span>HBL</span>
+          </label>
+          <label style="display: flex; align-items: center; cursor: pointer; padding: 10px 15px; background: #f8f9fa; border-radius: 6px; border: 2px solid #e0e0e0; transition: all 0.2s;">
+            <input type="radio" name="documentType" value="MBL" style="margin-right: 8px; cursor: pointer;">
+            <span>MBL</span>
+          </label>
+        </div>
+        <style>
+          input[type="radio"]:checked + span {
+            font-weight: 600;
+            color: #667eea;
+          }
+          label:has(input[type="radio"]:checked) {
+            background: #e8f0fe !important;
+            border-color: #667eea !important;
+          }
+        </style>
+      </div>
+
       <div style="margin-bottom: 20px;">
         <label for="fileInput" style="display: block; margin-bottom: 10px; font-weight: 600; color: #34495e;">
           Select PDF or Image Files (Multiple files supported):
@@ -317,8 +347,8 @@
         <div class="info-grid" id="cargoInfo"></div>
       </div>
 
-      <!-- Line Items -->
-      <div class="section">
+      <!-- Line Items (Commercial Invoice only) -->
+      <div class="section" id="lineItemsSection">
         <h2>Line Items (<span id="lineItemsCount">0</span>)</h2>
         <div style="overflow-x: auto;">
           <table id="lineItemsTable">
@@ -337,6 +367,24 @@
               </tr>
             </thead>
             <tbody id="lineItemsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Containers (HBL and MBL only) -->
+      <div class="section" id="containersSection" style="display: none;">
+        <h2>Containers (<span id="containersCount">0</span>)</h2>
+        <div style="overflow-x: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Container Number</th>
+                <th>Seal Number</th>
+                <th>Container Type</th>
+                <th>Stuffing Mode</th>
+              </tr>
+            </thead>
+            <tbody id="containersBody"></tbody>
           </table>
         </div>
       </div>
@@ -361,6 +409,7 @@
   <script>
     let extractedData = null;
     let uploadedFilePaths = [];
+    let currentDocumentType = 'COMMERCIAL_INVOICE';
 
     function handleFileSelect(event) {
       const files = Array.from(event.target.files);
@@ -451,7 +500,7 @@
       const loading = document.getElementById('loading');
       const error = document.getElementById('error');
       const results = document.getElementById('results');
-
+      
       // Reset UI
       btn.disabled = true;
       loading.classList.add('show');
@@ -460,9 +509,13 @@
       error.textContent = '';
 
       try {
+        // Get selected document type
+        const selectedType = document.querySelector('input[name="documentType"]:checked')?.value || 'COMMERCIAL_INVOICE';
+        currentDocumentType = selectedType;
+        
         const requestBody = uploadedFilePaths.length > 0 
-          ? { filePaths: uploadedFilePaths, batchSize: 5 } 
-          : {};
+          ? { filePaths: uploadedFilePaths, batchSize: 5, documentType: selectedType } 
+          : { documentType: selectedType };
         
         const response = await fetch('/api/extract', {
           method: 'POST',
@@ -480,7 +533,7 @@
 
         if (result.success && result.data) {
           extractedData = result.data;
-          displayResults(result.data);
+        displayResults(result.data);
         } else {
           throw new Error('Invalid response from server');
         }
@@ -496,162 +549,368 @@
     }
 
     function displayResults(data) {
-      // Document Information
+      const docType = (data.document_type || currentDocumentType || 'COMMERCIAL_INVOICE').toUpperCase();
+      
+      // Show/hide sections based on document type
+      const sections = {
+        documentInfo: true,
+        routingInfo: true,
+        partiesInfo: true,
+        financialsInfo: docType === 'COMMERCIAL_INVOICE',
+        cargoInfo: true,
+        lineItemsSection: docType === 'COMMERCIAL_INVOICE',
+        containersSection: (docType === 'HBL' || docType === 'MBL'),
+        cargoSummarySection: (docType === 'HBL' || docType === 'MBL'),
+        containerSummarySection: docType === 'MBL'
+      };
+
+      // Document Information - varies by type
       const docInfo = document.getElementById('documentInfo');
-      docInfo.innerHTML = `
+      let docInfoHTML = `
         <div class="info-item">
           <div class="info-label">Document Type</div>
-          <div class="info-value">${data.document_type || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">MBL Number</div>
-          <div class="info-value">${data.shipment_keys?.mbl_number || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">HBL Number</div>
-          <div class="info-value">${data.shipment_keys?.hbl_number || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">BL Number (Raw)</div>
-          <div class="info-value">${data.shipment_keys?.bl_number_raw || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Invoice Number</div>
-          <div class="info-value">${data.shipment_keys?.invoice_number || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Invoice Date</div>
-          <div class="info-value">${data.shipment_keys?.invoice_date || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Payment Terms</div>
-          <div class="info-value">${data.shipment_keys?.payment_terms || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Incoterm</div>
-          <div class="info-value">${data.shipment_keys?.incoterm || 'N/A'}</div>
+          <div class="info-value">${data.document_type || docType || 'N/A'}</div>
         </div>
       `;
 
-      // Routing Information
+      if (docType === 'COMMERCIAL_INVOICE') {
+        // Try multiple paths for commercial invoice data
+        const shipmentKeys = data.shipment_keys || data.extracted_data?.shipment_keys || {};
+        docInfoHTML += `
+          <div class="info-item">
+            <div class="info-label">Invoice Number</div>
+            <div class="info-value">${shipmentKeys.invoice_number || data.invoice_number || data.extracted_data?.invoice_number || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Invoice Date</div>
+            <div class="info-value">${shipmentKeys.invoice_date || data.invoice_date || data.extracted_data?.invoice_date || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Payment Terms</div>
+            <div class="info-value">${shipmentKeys.payment_terms || data.payment_terms || data.extracted_data?.payment_terms || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Incoterm</div>
+            <div class="info-value">${shipmentKeys.incoterm || data.incoterm || data.extracted_data?.incoterm || 'N/A'}</div>
+          </div>
+        `;
+      } else if (docType === 'HBL') {
+        docInfoHTML += `
+          <div class="info-item">
+            <div class="info-label">HBL Number</div>
+            <div class="info-value">${data.hbl_number || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Issue Date</div>
+            <div class="info-value">${data.issue_date || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Bill Status</div>
+            <div class="info-value">${data.bill_status || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Freight Term</div>
+            <div class="info-value">${data.freight_term || 'N/A'}</div>
+          </div>
+        `;
+      } else if (docType === 'MBL') {
+        docInfoHTML += `
+          <div class="info-item">
+            <div class="info-label">MBL Number</div>
+            <div class="info-value">${data.mbl_number || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Issue Date</div>
+            <div class="info-value">${data.issue_date || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Shipped On Board Date</div>
+            <div class="info-value">${data.shipped_on_board_date || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Bill Status</div>
+            <div class="info-value">${data.bill_status || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Freight Term</div>
+            <div class="info-value">${data.freight_term || 'N/A'}</div>
+          </div>
+        `;
+      }
+      docInfo.innerHTML = docInfoHTML;
+
+      // Routing Information - common for all types but fields may vary
       const routingInfo = document.getElementById('routingInfo');
-      routingInfo.innerHTML = `
-        <div class="info-item">
-          <div class="info-label">Vessel Name</div>
-          <div class="info-value">${data.routing?.vessel_name || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Voyage Number</div>
-          <div class="info-value">${data.routing?.voyage_number || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Port of Loading</div>
-          <div class="info-value">${data.routing?.port_of_loading || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Port of Discharge</div>
-          <div class="info-value">${data.routing?.port_of_discharge || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Port of Destination</div>
-          <div class="info-value">${data.routing?.port_of_destination || 'N/A'}</div>
-        </div>
-      `;
+      let routingHTML = '';
+      
+      if (docType === 'COMMERCIAL_INVOICE') {
+        // Try multiple paths for routing data
+        const routing = data.routing || data.extracted_data?.routing || {};
+        routingHTML = `
+          <div class="info-item">
+            <div class="info-label">Port of Loading</div>
+            <div class="info-value">${routing.port_of_loading || data.port_of_loading || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Port of Discharge</div>
+            <div class="info-value">${routing.port_of_discharge || data.port_of_discharge || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Port of Destination</div>
+            <div class="info-value">${routing.port_of_destination || data.port_of_destination || 'N/A'}</div>
+          </div>
+          ${routing.vessel_name ? `
+          <div class="info-item">
+            <div class="info-label">Vessel Name</div>
+            <div class="info-value">${routing.vessel_name || 'N/A'}</div>
+          </div>
+          ` : ''}
+          ${routing.voyage_number ? `
+          <div class="info-item">
+            <div class="info-label">Voyage Number</div>
+            <div class="info-value">${routing.voyage_number || 'N/A'}</div>
+          </div>
+          ` : ''}
+        `;
+      } else {
+        routingHTML = `
+          <div class="info-item">
+            <div class="info-label">Place of Receipt</div>
+            <div class="info-value">${data.routing?.place_of_receipt || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Port of Loading</div>
+            <div class="info-value">${data.routing?.port_of_loading || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Port of Discharge</div>
+            <div class="info-value">${data.routing?.port_of_discharge || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Place of Delivery</div>
+            <div class="info-value">${data.routing?.place_of_delivery || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Vessel Name</div>
+            <div class="info-value">${data.routing?.vessel_name || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Voyage Number</div>
+            <div class="info-value">${data.routing?.voyage_number || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">ETD</div>
+            <div class="info-value">${data.routing?.etd || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">ETA</div>
+            <div class="info-value">${data.routing?.eta || 'N/A'}</div>
+          </div>
+        `;
+      }
+      routingInfo.innerHTML = routingHTML;
 
-      // Parties
+      // Parties - common structure but may have additional fields for MBL
       const partiesInfo = document.getElementById('partiesInfo');
-      partiesInfo.innerHTML = `
+      // Try multiple paths for parties data
+      const parties = data.parties || data.extracted_data?.parties || {};
+      let partiesHTML = `
         <div class="info-item">
           <div class="info-label">Shipper</div>
-          <div class="info-value">${data.parties?.shipper?.name || 'N/A'}</div>
-          <div style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">${data.parties?.shipper?.address || ''}</div>
+          <div class="info-value">${parties.shipper?.name || data.shipper?.name || 'N/A'}</div>
+          <div style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">${parties.shipper?.address || data.shipper?.address || ''}</div>
         </div>
         <div class="info-item">
           <div class="info-label">Consignee</div>
-          <div class="info-value">${data.parties?.consignee?.name || 'N/A'}</div>
-          <div style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">${data.parties?.consignee?.address || ''}</div>
+          <div class="info-value">${parties.consignee?.name || data.consignee?.name || 'N/A'}</div>
+          <div style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">${parties.consignee?.address || data.consignee?.address || ''}</div>
         </div>
         <div class="info-item">
           <div class="info-label">Notify Party</div>
-          <div class="info-value">${data.parties?.notify_party?.name || 'N/A'}</div>
-          <div style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">${data.parties?.notify_party?.address || ''}</div>
+          <div class="info-value">${parties.notify_party?.name || data.notify_party?.name || 'N/A'}</div>
+          <div style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">${parties.notify_party?.address || data.notify_party?.address || ''}</div>
         </div>
       `;
-
-      // Financials
-      const financialsInfo = document.getElementById('financialsInfo');
-      financialsInfo.innerHTML = `
-        <div class="info-item">
-          <div class="info-label">Currency</div>
-          <div class="info-value">${data.financials?.currency || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Invoice Total</div>
-          <div class="info-value">${data.financials?.currency || ''} ${data.financials?.invoice_total || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">FOB Value</div>
-          <div class="info-value">${data.financials?.currency || ''} ${data.financials?.fob_value || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Freight</div>
-          <div class="info-value">${data.financials?.currency || ''} ${data.financials?.freight || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Insurance</div>
-          <div class="info-value">${data.financials?.currency || ''} ${data.financials?.insurance || 'N/A'}</div>
-        </div>
-      `;
-
-      // Cargo
-      const cargoInfo = document.getElementById('cargoInfo');
-      cargoInfo.innerHTML = `
-        <div class="info-item">
-          <div class="info-label">Goods Description</div>
-          <div class="info-value">${data.cargo?.goods_description || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Shipping Marks</div>
-          <div class="info-value">${data.cargo?.shipping_marks || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Country of Origin</div>
-          <div class="info-value">${data.cargo?.country_of_origin || 'N/A'}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Total Cartons</div>
-          <div class="info-value">${data.cargo?.total_cartons || 'N/A'}</div>
-        </div>
-      `;
-
-      // Line Items
-      const lineItems = data.line_items || [];
-      document.getElementById('lineItemsCount').textContent = lineItems.length;
-      const lineItemsBody = document.getElementById('lineItemsBody');
       
-      if (lineItems.length === 0) {
-        lineItemsBody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px;">No line items found</td></tr>';
+      if (docType === 'MBL') {
+        partiesHTML += `
+          <div class="info-item">
+            <div class="info-label">Carrier</div>
+            <div class="info-value">${data.parties?.carrier?.name || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Issuing Agent</div>
+            <div class="info-value">${data.parties?.issuing_agent?.name || 'N/A'}</div>
+            <div style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">${data.parties?.issuing_agent?.address || ''}</div>
+          </div>
+        `;
+      }
+      partiesInfo.innerHTML = partiesHTML;
+
+      // Financials - only for Commercial Invoice
+      const financialsInfo = document.getElementById('financialsInfo');
+      if (sections.financialsInfo) {
+        financialsInfo.style.display = 'block';
+        // Try multiple paths: data.financials, data.extracted_data?.financials, or root level
+        const financials = data.financials || data.extracted_data?.financials || {};
+        const currency = financials.currency || data.currency || '';
+        financialsInfo.innerHTML = `
+          <div class="info-item">
+            <div class="info-label">Currency</div>
+            <div class="info-value">${currency || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Invoice Total</div>
+            <div class="info-value">${currency ? currency + ' ' : ''}${financials.invoice_total || data.invoice_total || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">FOB Value</div>
+            <div class="info-value">${currency ? currency + ' ' : ''}${financials.fob_value || data.fob_value || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Freight</div>
+            <div class="info-value">${currency ? currency + ' ' : ''}${financials.freight || data.freight || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Insurance</div>
+            <div class="info-value">${currency ? currency + ' ' : ''}${financials.insurance || data.insurance || 'N/A'}</div>
+          </div>
+        `;
       } else {
-        lineItemsBody.innerHTML = lineItems.map(item => {
-          const qty = item.quantity || {};
-          const unitPrice = item.unit_price || {};
-          const lineAmount = item.line_amount || {};
-          
-          return `
+        financialsInfo.style.display = 'none';
+      }
+
+      // Cargo/Cargo Summary - varies by type
+      const cargoInfo = document.getElementById('cargoInfo');
+      if (docType === 'COMMERCIAL_INVOICE') {
+        // Try multiple paths for cargo data
+        const cargo = data.cargo || data.extracted_data?.cargo || {};
+        cargoInfo.innerHTML = `
+          <div class="info-item">
+            <div class="info-label">Goods Description</div>
+            <div class="info-value">${cargo.goods_description || data.goods_description || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Shipping Marks</div>
+            <div class="info-value">${cargo.shipping_marks || data.shipping_marks || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Country of Origin</div>
+            <div class="info-value">${cargo.country_of_origin || data.country_of_origin || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Total Cartons</div>
+            <div class="info-value">${cargo.total_cartons || cargo.package_count || data.total_cartons || data.package_count || 'N/A'}</div>
+          </div>
+          ${cargo.gross_weight?.value ? `
+          <div class="info-item">
+            <div class="info-label">Gross Weight</div>
+            <div class="info-value">${cargo.gross_weight.value} ${cargo.gross_weight.unit || ''}</div>
+          </div>
+          ` : ''}
+          ${cargo.volume?.value ? `
+          <div class="info-item">
+            <div class="info-label">Volume</div>
+            <div class="info-value">${cargo.volume.value} ${cargo.volume.unit || ''}</div>
+          </div>
+          ` : ''}
+        `;
+      } else {
+        // HBL or MBL - use cargo_summary or container_summary
+        const cargoSummary = data.cargo_summary || data.container_summary || {};
+        cargoInfo.innerHTML = `
+          <div class="info-item">
+            <div class="info-label">Cargo Description</div>
+            <div class="info-value">${cargoSummary.cargo_description || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Total Packages</div>
+            <div class="info-value">${cargoSummary.total_packages?.value || 'N/A'} ${cargoSummary.total_packages?.unit || ''}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Gross Weight</div>
+            <div class="info-value">${cargoSummary.gross_weight?.value || 'N/A'} ${cargoSummary.gross_weight?.unit || ''}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Volume</div>
+            <div class="info-value">${cargoSummary.volume?.value || 'N/A'} ${cargoSummary.volume?.unit || ''}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Shipping Marks</div>
+            <div class="info-value">${cargoSummary.shipping_marks || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Country of Origin</div>
+            <div class="info-value">${cargoSummary.country_of_origin || 'N/A'}</div>
+          </div>
+          ${docType === 'MBL' ? `
+          <div class="info-item">
+            <div class="info-label">Total Containers</div>
+            <div class="info-value">${cargoSummary.total_containers || 'N/A'}</div>
+          </div>
+          ` : ''}
+        `;
+      }
+
+      // Containers - for HBL and MBL
+      const containersSection = document.getElementById('containersSection');
+      if (sections.containersSection) {
+        containersSection.style.display = 'block';
+        const containers = data.containers || [];
+        document.getElementById('containersCount').textContent = containers.length;
+        const containersBody = document.getElementById('containersBody');
+        
+        if (containers.length === 0) {
+          containersBody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">No containers found</td></tr>';
+        } else {
+          containersBody.innerHTML = containers.map(container => `
             <tr>
-              <td>${item.line_no ?? ''}</td>
-              <td>${item.item_code ?? ''}</td>
-              <td>${item.reference_no ?? ''}</td>
-              <td>${item.po_number ?? ''}</td>
-              <td>${item.description ?? ''}</td>
-              <td>${item.color ?? ''}</td>
-              <td>${item.size ?? ''}</td>
-              <td>${qty.value ?? ''} ${qty.unit ?? ''}</td>
-              <td>${unitPrice.currency ?? ''} ${unitPrice.value ?? ''}</td>
-              <td>${lineAmount.currency ?? ''} ${lineAmount.value ?? ''}</td>
+              <td>${container.container_number || ''}</td>
+              <td>${container.seal_number || ''}</td>
+              <td>${container.container_type || ''}</td>
+              <td>${container.stuffing_mode || ''}</td>
             </tr>
-          `;
-        }).join('');
+          `).join('');
+        }
+      } else {
+        containersSection.style.display = 'none';
+      }
+
+      // Line Items - only for Commercial Invoice
+      const lineItemsSection = document.getElementById('lineItemsSection');
+      if (sections.lineItemsSection) {
+        lineItemsSection.style.display = 'block';
+        // Try multiple paths for line items
+        const lineItems = data.line_items || data.extracted_data?.line_items || [];
+        document.getElementById('lineItemsCount').textContent = lineItems.length;
+        const lineItemsBody = document.getElementById('lineItemsBody');
+        
+        if (lineItems.length === 0) {
+          lineItemsBody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px;">No line items found</td></tr>';
+        } else {
+          lineItemsBody.innerHTML = lineItems.map(item => {
+        const qty = item.quantity || {};
+        const unitPrice = item.unit_price || {};
+        const lineAmount = item.line_amount || {};
+        
+        return `
+          <tr>
+            <td>${item.line_no ?? ''}</td>
+            <td>${item.item_code ?? ''}</td>
+            <td>${item.reference_no ?? ''}</td>
+            <td>${item.po_number ?? ''}</td>
+            <td>${item.description ?? ''}</td>
+            <td>${item.color ?? ''}</td>
+            <td>${item.size ?? ''}</td>
+            <td>${qty.value ?? ''} ${qty.unit ?? ''}</td>
+            <td>${unitPrice.currency ?? ''} ${unitPrice.value ?? ''}</td>
+            <td>${lineAmount.currency ?? ''} ${lineAmount.value ?? ''}</td>
+          </tr>
+        `;
+      }).join('');
+        }
+      } else {
+        lineItemsSection.style.display = 'none';
       }
 
       // Missing Fields
@@ -672,6 +931,11 @@
       // Scroll to results
       document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+
+    function toggleJSON() {
+      const content = document.getElementById('jsonContent');
+        content.classList.toggle('show');
+      }
 
     function toggleJSON() {
       const content = document.getElementById('jsonContent');

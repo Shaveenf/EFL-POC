@@ -104,6 +104,94 @@ IMPORTANT
 - If a field is not present, return null.
 - Combine information across all pages, but avoid duplication.
 - Return ONLY valid JSON.
+
+OUTPUT JSON SCHEMA
+{
+  "document_type": "COMMERCIAL_INVOICE",
+  "invoice_number": null,
+  "invoice_date": null,
+  "payment_terms": null,
+  "incoterm": null,
+  "routing": {
+    "port_of_loading": null,
+    "port_of_discharge": null,
+    "port_of_destination": null,
+    "vessel_name": null,
+    "voyage_number": null
+  },
+  "parties": {
+    "shipper": {
+      "name": null,
+      "address": null
+    },
+    "consignee": {
+      "name": null,
+      "address": null
+    },
+    "notify_party": {
+      "name": null,
+      "address": null
+    }
+  },
+  "financials": {
+    "currency": null,
+    "invoice_total": null,
+    "fob_value": null,
+    "freight": null,
+    "insurance": null
+  },
+  "cargo": {
+    "goods_description": null,
+    "shipping_marks": null,
+    "country_of_origin": null,
+    "total_cartons": null,
+    "gross_weight": {
+      "value": null,
+      "unit": null
+    },
+    "volume": {
+      "value": null,
+      "unit": null
+    }
+  },
+  "line_items": [
+    {
+      "line_no": null,
+      "item_code": null,
+      "reference_no": null,
+      "po_number": null,
+      "description": null,
+      "color": null,
+      "size": null,
+      "quantity": {
+        "value": null,
+        "unit": null
+      },
+      "unit_price": {
+        "value": null,
+        "currency": null
+      },
+      "line_amount": {
+        "value": null,
+        "currency": null
+      }
+    }
+  ],
+  "missing_fields": [],
+  "extraction_confidence": {
+    "overall": null,
+    "line_items": null
+  }
+}
+
+VALIDATION RULES
+- Extract all line items one-by-one in document order.
+- Quantities must include value + unit.
+- Prices and amounts must be numeric.
+- Keep invoice numbers, BL numbers as strings.
+- Dates may be returned as-is if ISO conversion is uncertain.
+
+Now analyze the provided commercial invoice document images and output the JSON.
 `
 const MBL_PROMPT = `
 You are a logistics document extraction engine specialized in MASTER BILLS OF LADING (MBL) for CargoWise.

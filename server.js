@@ -72,8 +72,20 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// Extraction prompt (EXACT as specified)
-const EXTRACTION_PROMPT = MBL_PROMPT;
+// Function to get prompt based on document type
+function getPromptForDocumentType(documentType) {
+  switch (documentType?.toUpperCase()) {
+    case 'COMMERCIAL_INVOICE':
+    case 'INVOICE':
+      return COMMERCIAL_INVOICE_PROMPT;
+    case 'HBL':
+      return HBLPROMPT;
+    case 'MBL':
+      return MBL_PROMPT;
+    default:
+      return MBL_PROMPT; // Default fallback
+  }
+}
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -292,7 +304,7 @@ function isPdfFile(filePath) {
  * @param {string} filePath - Path to image or PDF file
  * @returns {Promise<Object>} Extracted structured data
  */
-async function extractDataWithOpenAI(filePaths, batchSize = 5) {
+async function extractDataWithOpenAI(filePaths, batchSize = 5, documentType = 'MBL') {
   // Normalize to array
   const files = Array.isArray(filePaths) ? filePaths : [filePaths];
   let allImagePaths = [];
@@ -317,6 +329,10 @@ async function extractDataWithOpenAI(filePaths, batchSize = 5) {
     }
 
     console.log(`\n🤖 Processing ${allImagePaths.length} image(s) in batches of ${batchSize}...`);
+    console.log(`📄 Document type: ${documentType}`);
+
+    // Get the appropriate prompt for the document type
+    const extractionPrompt = getPromptForDocumentType(documentType);
 
     // Process images in batches
     const batches = [];
@@ -350,14 +366,14 @@ async function extractDataWithOpenAI(filePaths, batchSize = 5) {
         };
       });
 
-      // Send batch to OpenAI
+      // Send batch to OpenAI with the appropriate prompt
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini", // Using gpt-4o-mini (vision-capable)
         messages: [
           {
             role: "user",
             content: [
-              { type: "text", text: EXTRACTION_PROMPT },
+              { type: "text", text: extractionPrompt },
               ...imageContents
             ]
           }
@@ -482,6 +498,7 @@ app.post('/api/extract', async (req, res) => {
   try {
     let filePaths = [];
     const batchSize = req.body.batchSize || 5; // Default batch size of 5 images
+    const documentType = req.body.documentType || 'MBL'; // Document type: COMMERCIAL_INVOICE, HBL, or MBL
     
     // Check if file paths were provided in the request
     if (req.body.filePaths && Array.isArray(req.body.filePaths)) {
@@ -507,15 +524,17 @@ app.post('/api/extract', async (req, res) => {
     }
 
     console.log(`📄 Processing ${filePaths.length} file(s): ${filePaths.map(f => path.basename(f)).join(', ')}`);
+    console.log(`📋 Document type: ${documentType}`);
 
     // Extract data from files (handles both PDFs and images, processes in batches)
-    const extractedData = await extractDataWithOpenAI(filePaths, batchSize);
+    const extractedData = await extractDataWithOpenAI(filePaths, batchSize, documentType);
 
     // Return extracted data
     res.json({
       success: true,
       data: extractedData,
-      filesProcessed: filePaths.length
+      filesProcessed: filePaths.length,
+      documentType: documentType
     });
 
   } catch (error) {
