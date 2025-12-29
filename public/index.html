@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shipping Document Extractor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 3px solid #667eea;
+    }
+    h1 {
+      color: #2c3e50;
+      font-size: 2.5em;
+      margin-bottom: 10px;
+    }
+    .subtitle {
+      color: #7f8c8d;
+      font-size: 1.1em;
+    }
+    .action-section {
+      text-align: center;
+      margin: 40px 0;
+      padding: 30px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+    .btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 1.2em;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      font-weight: 600;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+    .btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .loading {
+      display: none;
+      margin-top: 20px;
+    }
+    .loading.show {
+      display: block;
+    }
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .loading-text {
+      margin-top: 15px;
+      color: #667eea;
+      font-weight: 600;
+    }
+    .error {
+      display: none;
+      background: #fee;
+      color: #c33;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      border-left: 4px solid #c33;
+    }
+    .error.show {
+      display: block;
+    }
+    .results {
+      display: none;
+      margin-top: 30px;
+    }
+    .results.show {
+      display: block;
+    }
+    h2 {
+      color: #34495e;
+      margin-top: 30px;
+      margin-bottom: 15px;
+      font-size: 1.5em;
+      border-bottom: 2px solid #e0e0e0;
+      padding-bottom: 10px;
+    }
+    .section {
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #fafafa;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+    }
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 15px;
+      margin-top: 15px;
+    }
+    .info-item {
+      padding: 15px;
+      background: white;
+      border-radius: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .info-label {
+      font-weight: bold;
+      color: #7f8c8d;
+      font-size: 0.9em;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .info-value {
+      color: #2c3e50;
+      font-size: 1.1em;
+      word-break: break-word;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+      background: white;
+      font-size: 0.9em;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    th {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    tr:hover {
+      background: #f8f9fa;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    .missing-fields {
+      background: #fff3cd;
+      border-left-color: #ffc107;
+    }
+    .missing-fields ul {
+      margin-left: 20px;
+      margin-top: 10px;
+    }
+    .missing-fields li {
+      margin-bottom: 5px;
+    }
+    .json-section {
+      margin-top: 30px;
+    }
+    .json-toggle {
+      background: #6c757d;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1em;
+      margin-bottom: 10px;
+      transition: background 0.2s;
+    }
+    .json-toggle:hover {
+      background: #5a6268;
+    }
+    .json-content {
+      display: none;
+      background: #2c3e50;
+      color: #ecf0f1;
+      padding: 20px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      line-height: 1.5;
+    }
+    .json-content.show {
+      display: block;
+    }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .success-badge {
+      display: inline-block;
+      background: #28a745;
+      color: white;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 0.9em;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📄 Shipping Document Extractor</h1>
+      <p class="subtitle">Extract structured data from shipping documents using AI</p>
+    </div>
+
+    <div class="action-section">
+      <h2 style="margin-top: 0; margin-bottom: 20px;">Upload Document</h2>
+      
+      <div style="margin-bottom: 20px;">
+        <label for="fileInput" style="display: block; margin-bottom: 10px; font-weight: 600; color: #34495e;">
+          Select PDF or Image Files (Multiple files supported):
+        </label>
+        <input 
+          type="file" 
+          id="fileInput" 
+          accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
+          multiple
+          style="
+            width: 100%;
+            padding: 12px;
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            background: white;
+            font-size: 1em;
+            cursor: pointer;
+          "
+          onchange="handleFileSelect(event)"
+        />
+        <div id="fileInfo" style="margin-top: 10px; color: #7f8c8d; font-size: 0.9em;"></div>
+      </div>
+
+      <button class="btn" id="extractBtn" onclick="extractData()" disabled>
+        🚀 Extract Data from Document
+      </button>
+      
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Processing document with OpenAI Vision API...</div>
+      </div>
+
+      <div class="error" id="error"></div>
+    </div>
+
+    <div class="results" id="results">
+      <div class="success-badge">✅ Extraction Complete</div>
+      
+      <!-- Document Type & Keys -->
+      <div class="section">
+        <h2>Document Information</h2>
+        <div class="info-grid" id="documentInfo"></div>
+      </div>
+
+      <!-- Routing -->
+      <div class="section">
+        <h2>Routing Information</h2>
+        <div class="info-grid" id="routingInfo"></div>
+      </div>
+
+      <!-- Parties -->
+      <div class="section">
+        <h2>Parties</h2>
+        <div class="info-grid" id="partiesInfo"></div>
+      </div>
+
+      <!-- Financials -->
+      <div class="section">
+        <h2>Financial Information</h2>
+        <div class="info-grid" id="financialsInfo"></div>
+      </div>
+
+      <!-- Cargo -->
+      <div class="section">
+        <h2>Cargo Information</h2>
+        <div class="info-grid" id="cargoInfo"></div>
+      </div>
+
+      <!-- Line Items -->
+      <div class="section">
+        <h2>Line Items (<span id="lineItemsCount">0</span>)</h2>
+        <div style="overflow-x: auto;">
+          <table id="lineItemsTable">
+            <thead>
+              <tr>
+                <th>Line No</th>
+                <th>Item Code</th>
+                <th>Reference No</th>
+                <th>PO Number</th>
+                <th>Description</th>
+                <th>Color</th>
+                <th>Size</th>
+                <th>Quantity</th>
+                <th>Unit Price</th>
+                <th>Line Amount</th>
+              </tr>
+            </thead>
+            <tbody id="lineItemsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Missing Fields -->
+      <div class="section missing-fields">
+        <h2>Missing Fields</h2>
+        <div id="missingFields"></div>
+      </div>
+
+      <!-- Raw JSON -->
+      <div class="section json-section">
+        <h2>Raw JSON Data</h2>
+        <button class="json-toggle" onclick="toggleJSON()">Show/Hide JSON</button>
+        <div class="json-content" id="jsonContent">
+          <pre id="jsonPre"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let extractedData = null;
+    let uploadedFilePaths = [];
+
+    function handleFileSelect(event) {
+      const files = Array.from(event.target.files);
+      const fileInfo = document.getElementById('fileInfo');
+      const extractBtn = document.getElementById('extractBtn');
+      
+      if (files.length > 0) {
+        const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+        const fileList = files.map((file, index) => {
+          const fileSize = (file.size / 1024 / 1024).toFixed(2);
+          return `${index + 1}. ${file.name} (${fileSize} MB)`;
+        }).join('<br>');
+        
+        fileInfo.innerHTML = `
+          <strong>Selected ${files.length} file(s):</strong><br>
+          ${fileList}<br>
+          <strong>Total size:</strong> ${(totalSize / 1024 / 1024).toFixed(2)} MB
+        `;
+        extractBtn.disabled = false;
+        
+        // Upload the files
+        uploadFiles(files);
+      } else {
+        fileInfo.innerHTML = '';
+        extractBtn.disabled = true;
+        uploadedFilePaths = [];
+      }
+    }
+
+    async function uploadFiles(files) {
+      const formData = new FormData();
+      files.forEach(file => {
+        formData.append('files', file);
+      });
+      
+      const fileInfo = document.getElementById('fileInfo');
+      const errorDiv = document.getElementById('error');
+      
+      // Show uploading status
+      fileInfo.innerHTML += '<br><em style="color: #667eea;">Uploading...</em>';
+      errorDiv.classList.remove('show');
+      
+      try {
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await response.text();
+          console.error('Non-JSON response:', text.substring(0, 200));
+          throw new Error('Server returned an error. Please check the console for details.');
+        }
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(result.error || 'Upload failed');
+        }
+        
+        if (result.success) {
+          uploadedFilePaths = result.files.map(f => f.filename);
+          console.log(`${result.count} file(s) uploaded successfully:`, result.files);
+          fileInfo.innerHTML = fileInfo.innerHTML.replace(
+            '<em style="color: #667eea;">Uploading...</em>', 
+            `<em style="color: #28a745;">✓ ${result.count} file(s) uploaded successfully</em>`
+          );
+        } else {
+          throw new Error(result.error || 'Upload failed');
+        }
+      } catch (error) {
+        console.error('Upload error:', error);
+        errorDiv.textContent = `Upload error: ${error.message}`;
+        errorDiv.classList.add('show');
+        fileInfo.innerHTML = fileInfo.innerHTML.replace(
+          '<em style="color: #667eea;">Uploading...</em>', 
+          '<em style="color: #c33;">✗ Upload failed</em>'
+        );
+        uploadedFilePaths = [];
+        document.getElementById('extractBtn').disabled = true;
+      }
+    }
+
+    async function extractData() {
+      const btn = document.getElementById('extractBtn');
+      const loading = document.getElementById('loading');
+      const error = document.getElementById('error');
+      const results = document.getElementById('results');
+
+      // Reset UI
+      btn.disabled = true;
+      loading.classList.add('show');
+      error.classList.remove('show');
+      results.classList.remove('show');
+      error.textContent = '';
+
+      try {
+        const requestBody = uploadedFilePaths.length > 0 
+          ? { filePaths: uploadedFilePaths, batchSize: 5 } 
+          : {};
+        
+        const response = await fetch('/api/extract', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to extract data');
+        }
+
+        if (result.success && result.data) {
+          extractedData = result.data;
+          displayResults(result.data);
+        } else {
+          throw new Error('Invalid response from server');
+        }
+
+      } catch (err) {
+        error.textContent = `Error: ${err.message}`;
+        error.classList.add('show');
+        console.error('Extraction error:', err);
+      } finally {
+        btn.disabled = false;
+        loading.classList.remove('show');
+      }
+    }
+
+    function displayResults(data) {
+      // Document Information
+      const docInfo = document.getElementById('documentInfo');
+      docInfo.innerHTML = `
+        <div class="info-item">
+          <div class="info-label">Document Type</div>
+          <div class="info-value">${data.document_type || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">MBL Number</div>
+          <div class="info-value">${data.shipment_keys?.mbl_number || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">HBL Number</div>
+          <div class="info-value">${data.shipment_keys?.hbl_number || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">BL Number (Raw)</div>
+          <div class="info-value">${data.shipment_keys?.bl_number_raw || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Invoice Number</div>
+          <div class="info-value">${data.shipment_keys?.invoice_number || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Invoice Date</div>
+          <div class="info-value">${data.shipment_keys?.invoice_date || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Payment Terms</div>
+          <div class="info-value">${data.shipment_keys?.payment_terms || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Incoterm</div>
+          <div class="info-value">${data.shipment_keys?.incoterm || 'N/A'}</div>
+        </div>
+      `;
+
+      // Routing Information
+      const routingInfo = document.getElementById('routingInfo');
+      routingInfo.innerHTML = `
+        <div class="info-item">
+          <div class="info-label">Vessel Name</div>
+          <div class="info-value">${data.routing?.vessel_name || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Voyage Number</div>
+          <div class="info-value">${data.routing?.voyage_number || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Port of Loading</div>
+          <div class="info-value">${data.routing?.port_of_loading || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Port of Discharge</div>
+          <div class="info-value">${data.routing?.port_of_discharge || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Port of Destination</div>
+          <div class="info-value">${data.routing?.port_of_destination || 'N/A'}</div>
+        </div>
+      `;
+
+      // Parties
+      const partiesInfo = document.getElementById('partiesInfo');
+      partiesInfo.innerHTML = `
+        <div class="info-item">
+          <div class="info-label">Shipper</div>
+          <div class="info-value">${data.parties?.shipper?.name || 'N/A'}</div>
+          <div style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">${data.parties?.shipper?.address || ''}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Consignee</div>
+          <div class="info-value">${data.parties?.consignee?.name || 'N/A'}</div>
+          <div style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">${data.parties?.consignee?.address || ''}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Notify Party</div>
+          <div class="info-value">${data.parties?.notify_party?.name || 'N/A'}</div>
+          <div style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">${data.parties?.notify_party?.address || ''}</div>
+        </div>
+      `;
+
+      // Financials
+      const financialsInfo = document.getElementById('financialsInfo');
+      financialsInfo.innerHTML = `
+        <div class="info-item">
+          <div class="info-label">Currency</div>
+          <div class="info-value">${data.financials?.currency || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Invoice Total</div>
+          <div class="info-value">${data.financials?.currency || ''} ${data.financials?.invoice_total || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">FOB Value</div>
+          <div class="info-value">${data.financials?.currency || ''} ${data.financials?.fob_value || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Freight</div>
+          <div class="info-value">${data.financials?.currency || ''} ${data.financials?.freight || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Insurance</div>
+          <div class="info-value">${data.financials?.currency || ''} ${data.financials?.insurance || 'N/A'}</div>
+        </div>
+      `;
+
+      // Cargo
+      const cargoInfo = document.getElementById('cargoInfo');
+      cargoInfo.innerHTML = `
+        <div class="info-item">
+          <div class="info-label">Goods Description</div>
+          <div class="info-value">${data.cargo?.goods_description || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Shipping Marks</div>
+          <div class="info-value">${data.cargo?.shipping_marks || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Country of Origin</div>
+          <div class="info-value">${data.cargo?.country_of_origin || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Total Cartons</div>
+          <div class="info-value">${data.cargo?.total_cartons || 'N/A'}</div>
+        </div>
+      `;
+
+      // Line Items
+      const lineItems = data.line_items || [];
+      document.getElementById('lineItemsCount').textContent = lineItems.length;
+      const lineItemsBody = document.getElementById('lineItemsBody');
+      
+      if (lineItems.length === 0) {
+        lineItemsBody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px;">No line items found</td></tr>';
+      } else {
+        lineItemsBody.innerHTML = lineItems.map(item => {
+          const qty = item.quantity || {};
+          const unitPrice = item.unit_price || {};
+          const lineAmount = item.line_amount || {};
+          
+          return `
+            <tr>
+              <td>${item.line_no ?? ''}</td>
+              <td>${item.item_code ?? ''}</td>
+              <td>${item.reference_no ?? ''}</td>
+              <td>${item.po_number ?? ''}</td>
+              <td>${item.description ?? ''}</td>
+              <td>${item.color ?? ''}</td>
+              <td>${item.size ?? ''}</td>
+              <td>${qty.value ?? ''} ${qty.unit ?? ''}</td>
+              <td>${unitPrice.currency ?? ''} ${unitPrice.value ?? ''}</td>
+              <td>${lineAmount.currency ?? ''} ${lineAmount.value ?? ''}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Missing Fields
+      const missingFields = data.missing_fields || [];
+      const missingFieldsDiv = document.getElementById('missingFields');
+      if (missingFields.length > 0) {
+        missingFieldsDiv.innerHTML = `<ul>${missingFields.map(field => `<li>${field}</li>`).join('')}</ul>`;
+      } else {
+        missingFieldsDiv.innerHTML = '<p>None</p>';
+      }
+
+      // Raw JSON
+      document.getElementById('jsonPre').textContent = JSON.stringify(data, null, 2);
+
+      // Show results
+      document.getElementById('results').classList.add('show');
+      
+      // Scroll to results
+      document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function toggleJSON() {
+      const content = document.getElementById('jsonContent');
+      content.classList.toggle('show');
+    }
+  </script>
+</body>
+</html>

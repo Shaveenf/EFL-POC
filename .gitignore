@@ -1,0 +1,8 @@
+node_modules/
+.env
+extracted.json
+view.html
+*.log
+uploads/
+temp_images/
+
